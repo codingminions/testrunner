@@ -1,5 +1,10 @@
 import copy
-import exceptions
+import builtins as exceptions
+
+
+exceptions_list = sorted(n for n, e in vars(exceptions).items()
+                         if isinstance(e, type) and
+                            issubclass(e, BaseException))
 import time
 import uuid
 import zlib
@@ -13,7 +18,7 @@ import memcacheConstants
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
 from mc_bin_client import MemcachedClient
 from threading import Thread
-import Queue
+import queue
 from collections import defaultdict
 from couchbase_helper.stats_tools import StatsCommon
 from remote.remote_util import RemoteMachineShellConnection

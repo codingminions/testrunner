@@ -1,7 +1,7 @@
-from ldap_user import LdapUser
-from internal_user import InternalUser
+from .ldap_user import LdapUser
+from .internal_user import InternalUser
 from remote.remote_util import RemoteMachineShellConnection
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import json
 
 class RbacBase:
@@ -19,7 +19,7 @@ class RbacBase:
         content = rest.ldapRestOperationGetResponse()
         if not content['enabled']:
             api = rest.baseUrl + 'settings/saslauthdAuth'
-            params = urllib.urlencode({"enabled": 'true', "admins": [], "roAdmins": []})
+            params = urllib.parse.urlencode({"enabled": 'true', "admins": [], "roAdmins": []})
             status, content, header = rest._http_request(api, 'POST', params)
             return json.loads(content)
 
@@ -59,7 +59,7 @@ class RbacBase:
             if self.source == "ldap":
                 response = rest.set_user_roles(userid,payload)
             elif self.source == 'builtin':
-                if 'password' in user_role.keys():
+                if 'password' in list(user_role.keys()):
                     payload=payload+'&password='+user_role['password']
                 cluster_compatibility = rest.check_cluster_compatibility("5.0")
                 if cluster_compatibility is None:
@@ -95,7 +95,7 @@ class RbacBase:
 
     def check_user_permission(self,user,password,user_per_list,rest):
         response = rest.check_user_permission(user,password,user_per_list)
-        print response
+        print(response)
         return response
 
 

@@ -3,10 +3,10 @@
 # map a version # -> rpm url
 from datetime import datetime
 import time
-import urllib2
+import urllib.request, urllib.error, urllib.parse
 import re
 import socket
-import BeautifulSoup
+from . import BeautifulSoup
 import testconstants
 import logger
 import traceback
@@ -550,7 +550,7 @@ class BuildQuery(object):
                     self.log.info("Try collecting build information from url: %s" % (build_page + index_url))
                     if timeout:
                         socket.setdefaulttimeout(timeout)
-                    page = urllib2.urlopen(build_page + index_url)
+                    page = urllib.request.urlopen(build_page + index_url)
                     soup = BeautifulSoup.BeautifulSoup(page)
                     break
                 except:
@@ -577,8 +577,8 @@ class BuildQuery(object):
                         build.url = '%s/%s' % (build_page, build_id)
                         builds.append(build)
                 except Exception as e:
-                    print "ERROR in creating build/change info for: Build_id: %s , Build_Description: %s" % (build_id, build_description)
-                    print traceback.print_exc(file=sys.stderr)
+                    print("ERROR in creating build/change info for: Build_id: %s , Build_Description: %s" % (build_id, build_description))
+                    print(traceback.print_exc(file=sys.stderr))
                     #raise e : Skipping parsing for this build information,
                     #Eventually, It will fail with build not found error at install.py:240
             for build in builds:

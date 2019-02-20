@@ -11,7 +11,7 @@ import math
 import crc32
 import traceback
 import testconstants
-from httplib import IncompleteRead
+from http.client import IncompleteRead
 from threading import Thread
 from memcacheConstants import ERR_NOT_FOUND,NotFoundError
 from membase.api.rest_client import RestConnection, Bucket, RestHelper
@@ -36,7 +36,7 @@ import memcacheConstants
 
 try:
     CHECK_FLAG = False
-    if (testconstants.TESTRUNNER_CLIENT in os.environ.keys()) and os.environ[testconstants.TESTRUNNER_CLIENT] == testconstants.PYTHON_SDK:
+    if (testconstants.TESTRUNNER_CLIENT in list(os.environ.keys())) and os.environ[testconstants.TESTRUNNER_CLIENT] == testconstants.PYTHON_SDK:
         from sdk_client import SDKSmartClient as VBucketAwareMemcached
         from sdk_client import SDKBasedKVStoreAwareSmartClient as KVStoreAwareSmartClient
     else:
@@ -270,7 +270,7 @@ class BucketCreateTask(Task):
 
         authType = 'none' if self.password is None else 'sasl'
 
-        if int(info.port) in xrange(9091, 9991):
+        if int(info.port) in range(9091, 9991):
             try:
                 self.port = info.port
                 rest.create_bucket(bucket=self.bucket)
@@ -327,7 +327,7 @@ class BucketCreateTask(Task):
 
     def check(self, task_manager):
         try:
-            if self.bucket_type == 'memcached' or int(self.port) in xrange(9091, 9991):
+            if self.bucket_type == 'memcached' or int(self.port) in range(9091, 9991):
                 self.set_result(True)
                 self.state = FINISHED
                 return
@@ -402,7 +402,7 @@ class RebalanceTask(Task):
 
         try:
             self.rest = RestConnection(self.servers[0])
-        except ServerUnavailableException, e:
+        except ServerUnavailableException as e:
             self.log.error(e)
             self.state = FINISHED
             self.set_exception(e)
@@ -413,7 +413,7 @@ class RebalanceTask(Task):
 
     def execute(self, task_manager):
         try:
-            if len(self.to_add) and len(self.to_add) == len(self.to_remove):
+            if len(self.to_add) and len(self.to_add) == len(self.to_remove):    #why to_add 2 times? #swap reabalance
                 node_version_check = self.rest.check_node_versions()
                 non_swap_servers = set(self.servers) - set(self.to_remove) - set(self.to_add)
                 self.old_vbuckets = RestHelper(self.rest)._get_vbuckets(non_swap_servers, None)
@@ -550,7 +550,7 @@ class RebalanceTask(Task):
             for removed in self.to_remove:
                 try:
                     rest = RestConnection(removed)
-                except ServerUnavailableException, e:
+                except ServerUnavailableException as e:
                     self.log.error(e)
                     continue
                 start = time.time()
@@ -562,7 +562,7 @@ class RebalanceTask(Task):
                             break
                         else:
                             time.sleep(0.1)
-                    except (ServerUnavailableException, IncompleteRead), e:
+                    except (ServerUnavailableException, IncompleteRead) as e:
                         self.log.error(e)
             result = True
             for node in set(self.to_remove) - set(success_cleaned):
@@ -605,12 +605,12 @@ class StatsWaitTask(Task):
             try:
                 client = self._get_connection(server)
                 stats = client.stats(self.param)
-                if not stats.has_key(self.stat):
+                if self.stat not in stats:
                     self.state = FINISHED
                     self.set_exception(Exception("Stat {0} not found".format(self.stat)))
                     return
                 if stats[self.stat].isdigit():
-                    stat_result += long(stats[self.stat])
+                    stat_result += int(stats[self.stat])
                 else:
                     stat_result = stats[self.stat]
             except EOFError as ex:
@@ -625,17 +625,17 @@ class StatsWaitTask(Task):
         self.log.info("Saw %s %s %s %s expected on %s,%s bucket" % (self.stat, stat_result,
                       self.comparison, self.value, self._stringify_servers(), self.bucket))
 
-        for server, conn in self.conns.items():
+        for server, conn in list(self.conns.items()):
             conn.close()
         self.state = FINISHED
         self.set_result(True)
 
     def _stringify_servers(self):
-        return ''.join([`server.ip + ":" + str(server.port)` for server in self.servers])
+        return ''.join([repr(server.ip + ":" + str(server.port)) for server in self.servers])
 
     def _get_connection(self, server, admin_user='cbadminbucket',admin_pass='password'):
-        if not self.conns.has_key(server):
-            for i in xrange(3):
+        if server not in self.conns:
+            for i in range(3):
                 try:
                     self.conns[server] = MemcachedClientHelper.direct_client(server, self.bucket, admin_user=admin_user,
                                                                              admin_pass=admin_pass)
@@ -648,9 +648,9 @@ class StatsWaitTask(Task):
         return self.conns[server]
 
     def _compare(self, cmp_type, a, b):
-        if isinstance(b, (int, long)) and a.isdigit():
-            a = long(a)
-        elif isinstance(b, (int, long)) and not a.isdigit():
+        if isinstance(b, int) and a.isdigit():
+            a = int(a)
+        elif isinstance(b, int) and not a.isdigit():
                 return False
         if (cmp_type == StatsWaitTask.EQUAL and a == b) or\
             (cmp_type == StatsWaitTask.NOT_EQUAL and a != b) or\
@@ -674,8 +674,8 @@ class XdcrStatsWaitTask(StatsWaitTask):
                 stat = 'replications/' + rest.get_replication_for_buckets(self.bucket, self.bucket)['id'] + '/' + self.stat
                 # just get the required value, don't fetch the big big structure of stats
                 stats_value = rest.fetch_bucket_xdcr_stats(self.bucket)['op']['samples'][stat][-1]
-                stat_result += long(stats_value)
-            except (EOFError, Exception)  as ex:
+                stat_result += int(stats_value)
+            except (EOFError, Exception) as ex:
                 self.state = FINISHED
                 self.set_exception(ex)
                 return
@@ -687,7 +687,7 @@ class XdcrStatsWaitTask(StatsWaitTask):
         self.log.info("Saw %s %s %s %s expected on %s,%s bucket" % (self.stat, stat_result,
                       self.comparison, self.value, self._stringify_servers(), self.bucket))
 
-        for server, conn in self.conns.items():
+        for server, conn in list(self.conns.items()):
             conn.close()
         self.state = FINISHED
         self.set_result(True)
@@ -723,14 +723,14 @@ class GenericLoadingTask(Thread, Task):
 
     def run(self):
         while self.has_next() and not self.done():
-            self.next()
+            next(self)
         self.state = FINISHED
         self.set_result(True)
 
     def has_next(self):
         raise NotImplementedError
 
-    def next(self):
+    def __next__(self):
         raise NotImplementedError
 
     def _unlocked_create(self, partition, key, value, is_base64_value=False):
@@ -740,7 +740,7 @@ class GenericLoadingTask(Thread, Task):
                 value_json['mutated'] = 0
             value = json.dumps(value_json)
         except ValueError:
-            index = random.choice(range(len(value)))
+            index = random.choice(list(range(len(value))))
             if not is_base64_value:
                 value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
         except TypeError:
@@ -796,7 +796,7 @@ class GenericLoadingTask(Thread, Task):
         except ValueError:
             if value is None:
                 return
-            index = random.choice(range(len(value)))
+            index = random.choice(list(range(len(value))))
             value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
         except BaseException as error:
             self.state = FINISHED
@@ -846,7 +846,7 @@ class GenericLoadingTask(Thread, Task):
                 return
         except ValueError:
             o, c, old_value = self.client.get(key, collection=self.collection)
-            index = random.choice(range(len(value)))
+            index = random.choice(list(range(len(value))))
             value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
             old_value += value
         except BaseException as error:
@@ -897,7 +897,7 @@ class GenericLoadingTask(Thread, Task):
 
 
     def _delete_batch(self, partition_keys_dic, key_val):
-        for partition, keys in partition_keys_dic.items():
+        for partition, keys in list(partition_keys_dic.items()):
             for key in keys:
                 try:
                     self.client.delete(key, collection=self.collection)
@@ -916,20 +916,20 @@ class GenericLoadingTask(Thread, Task):
 
     def _read_batch(self, partition_keys_dic, key_val):
         try:
-            self.client.getMulti(key_val.keys(), self.pause, self.timeout, collection=self.collection)
+            self.client.getMulti(list(key_val.keys()), self.pause, self.timeout, collection=self.collection)
             # print "the key is {} from collection {}".format(c, collection)
         except MemcachedError as error:
                 self.state = FINISHED
                 self.set_exception(error)
 
     def _process_values_for_create(self, key_val):
-        for key, value in key_val.items():
+        for key, value in list(key_val.items()):
             try:
                 value_json = json.loads(value)
                 value_json['mutated'] = 0
                 value = json.dumps(value_json)
             except ValueError:
-                index = random.choice(range(len(value)))
+                index = random.choice(list(range(len(value))))
                 value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
             except TypeError:
                  value = json.dumps(value)
@@ -937,7 +937,7 @@ class GenericLoadingTask(Thread, Task):
                 key_val[key] = value
 
     def _process_values_for_update(self, partition_keys_dic, key_val):
-        for partition, keys in partition_keys_dic.items():
+        for partition, keys in list(partition_keys_dic.items()):
             for key in keys:
                 value = partition.get_valid(key)
                 if value is None:
@@ -949,14 +949,14 @@ class GenericLoadingTask(Thread, Task):
                     value_json['mutated'] += 1
                     value = json.dumps(value_json)
                 except ValueError:
-                    index = random.choice(range(len(value)))
+                    index = random.choice(list(range(len(value))))
                     value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
                 finally:
                     key_val[key] = value
 
 
     def _populate_kvstore(self, partition_keys_dic, key_val):
-        for partition, keys in partition_keys_dic.items():
+        for partition, keys in list(partition_keys_dic.items()):
             self._populate_kvstore_partition(partition, keys, key_val)
 
     def _release_locks_on_kvstore(self):
@@ -996,7 +996,7 @@ class LoadDocumentsTask(GenericLoadingTask):
 
     def next(self, override_generator = None):
         if self.batch_size == 1:
-            key, value = self.generator.next()
+            key, value = next(self.generator)
             partition = self.kv_store.acquire_partition(key,self.bucket, self.collection)
             if self.op_type == 'create':
                 is_base64_value = (self.generator.__class__.__name__ == 'Base64Generator')
@@ -1020,7 +1020,7 @@ class LoadDocumentsTask(GenericLoadingTask):
             doc_gen = override_generator or self.generator
             key_value = doc_gen.next_batch()
 
-            partition_keys_dic = self.kv_store.acquire_partitions(key_value.keys(), self.bucket, self.collection)
+            partition_keys_dic = self.kv_store.acquire_partitions(list(key_value.keys()), self.bucket, self.collection)
             if self.op_type == 'create':
                 self._create_batch(partition_keys_dic, key_value)
             elif self.op_type == 'update':
@@ -1032,7 +1032,7 @@ class LoadDocumentsTask(GenericLoadingTask):
             else:
                 self.state = FINISHED
                 self.set_exception(Exception("Bad operation type: %s" % self.op_type))
-            self.kv_store.release_partitions(partition_keys_dic.keys())
+            self.kv_store.release_partitions(list(partition_keys_dic.keys()))
 
 
 
@@ -1099,7 +1099,7 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
             if self.buckets:
                 self.bucket = self.buckets[iterator]
             while self.has_next() and not self.done():
-                self.next()
+                next(self)
             iterator += 1
 
     def run_high_throughput_mode(self):
@@ -1205,7 +1205,7 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
         """
             unpacks keys,values and adds them to provided store
         """
-        for key, value in key_value.iteritems():
+        for key, value in key_value.items():
 
             if self.only_store_hash:
                 value = str(crc32.crc32_hash(value))
@@ -1340,12 +1340,12 @@ class ESRunQueryCompare(Task):
                 self.log.info("Status: %s" %fts_status)
                 if fts_hits < 0:
                     self.passed = False
-                elif 'errors' in fts_status.keys() and fts_status['errors']:
+                elif 'errors' in list(fts_status.keys()) and fts_status['errors']:
                         if fts_status['successful'] == 0 and \
                                 (list(set(fts_status['errors'].values())) ==
-                                    [u'context deadline exceeded'] or
+                                    ['context deadline exceeded'] or
                                 list(set(fts_status['errors'].values())) ==
-                                    [u'TooManyClauses[maxClauseCount is set to 1024]']):
+                                    ['TooManyClauses[maxClauseCount is set to 1024]']):
                             # too many clauses in the query for fts to process
                             self.log.info("FTS chose not to run this big query"
                                           "...skipping ES validation")
@@ -1435,9 +1435,9 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
                                  self.bucket))
         return has
 
-    def next(self):
+    def __next__(self):
         key_value = self.batch_generator.next_batch()
-        partition_keys_dic = self.kv_store.acquire_partitions(key_value.keys(),self.bucket, self.collection)
+        partition_keys_dic = self.kv_store.acquire_partitions(list(key_value.keys()),self.bucket, self.collection)
         if self.op_type == 'create':
             self._create_batch(partition_keys_dic, key_value)
         elif self.op_type == 'update':
@@ -1449,7 +1449,7 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
         else:
             self.state = FINISHED
             self.set_exception(Exception("Bad operation type: %s" % self.op_type))
-        self.kv_store.release_partitions(partition_keys_dic.keys(), self.collection)
+        self.kv_store.release_partitions(list(partition_keys_dic.keys()), self.collection)
 
     def _create_batch(self, partition_keys_dic, key_val):
         try:
@@ -1472,7 +1472,7 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
 
 
     def _delete_batch(self, partition_keys_dic, key_val):
-        for partition, keys in partition_keys_dic.items():
+        for partition, keys in list(partition_keys_dic.items()):
             for key in keys:
                 try:
                     self.client.delete(key, collection=self.collection)
@@ -1491,25 +1491,25 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
 
     def _read_batch(self, partition_keys_dic, key_val):
         try:
-            self.client.getMulti(key_val.keys(), self.pause, self.timeout, collection=self.collection)
+            self.client.getMulti(list(key_val.keys()), self.pause, self.timeout, collection=self.collection)
         except MemcachedError as error:
                 self.state = FINISHED
                 self.set_exception(error)
 
     def _process_values_for_create(self, key_val):
-        for key, value in key_val.items():
+        for key, value in list(key_val.items()):
             try:
                 value_json = json.loads(value)
                 value_json['mutated'] = 0
                 value = json.dumps(value_json)
             except ValueError:
-                index = random.choice(range(len(value)))
+                index = random.choice(list(range(len(value))))
                 value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
             finally:
                 key_val[key] = value
 
     def _process_values_for_update(self, partition_keys_dic, key_val):
-        for partition, keys in partition_keys_dic.items():
+        for partition, keys in list(partition_keys_dic.items()):
             for key in keys:
                 value = partition.get_valid(key)
                 if value is None:
@@ -1521,14 +1521,14 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
                     value_json['mutated'] += 1
                     value = json.dumps(value_json)
                 except ValueError:
-                    index = random.choice(range(len(value)))
+                    index = random.choice(list(range(len(value))))
                     value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
                 finally:
                     key_val[key] = value
 
 
     def _populate_kvstore(self, partition_keys_dic, key_val):
-        for partition, keys in partition_keys_dic.items():
+        for partition, keys in list(partition_keys_dic.items()):
             self._populate_kvstore_partition(partition, keys, key_val)
 
     def _release_locks_on_kvstore(self):
@@ -1561,7 +1561,7 @@ class WorkloadTask(GenericLoadingTask):
             return True
         return False
 
-    def next(self):
+    def __next__(self):
         self.itr += 1
         rand = random.randint(1, self.delete)
         if rand > 0 and rand <= self.create:
@@ -1661,7 +1661,7 @@ class ValidateDataTask(GenericLoadingTask):
                 self.itr / (time.time() - self.start_time)).rstrip())
         return False
 
-    def next(self):
+    def __next__(self):
         if self.itr < self.num_valid_keys:
             self._check_valid_key(self.valid_keys[self.itr],self.bucket, self.collection)
         else:
@@ -1690,7 +1690,7 @@ class ValidateDataTask(GenericLoadingTask):
             else:
                 value = json.dumps(value)
                 if d != json.loads(value):
-                    print "the collection is {} for which the value is failing".format(collection)
+                    print("the collection is {} for which the value is failing".format(collection))
                     self.state = FINISHED
                     self.set_exception(Exception('Key: %s, Bad result: %s != %s for key %s' % (key, json.dumps(d), value, key)))
             if CHECK_FLAG and o != flag:
@@ -1757,7 +1757,7 @@ class ValidateDataWithActiveAndReplicaTask(GenericLoadingTask):
                 self.itr / (time.time() - self.start_time)).rstrip())
         return False
 
-    def next(self):
+    def __next__(self):
         if self.itr < self.num_valid_keys:
             self._check_valid_key(self.valid_keys[self.itr],self.bucket,self.collection)
         else:
@@ -1841,7 +1841,7 @@ class BatchedValidateDataTask(GenericLoadingTask):
                 self.itr / (time.time() - self.start_time)).rstrip())
         return has
 
-    def next(self):
+    def __next__(self):
         if self.itr < self.num_valid_keys:
             keys_batch = self.valid_keys[self.itr:self.itr + self.batch_size]
             self.itr += len(keys_batch)
@@ -1854,20 +1854,20 @@ class BatchedValidateDataTask(GenericLoadingTask):
         partition_keys_dic = self.kv_store.acquire_partitions(keys, bucket, collection=collection)
         try:
             key_vals = self.client.getMulti(keys, parallel=True, timeout_sec=self.timeout_sec, collection=collection)
-        except ValueError, error:
+        except ValueError as error:
             self.state = FINISHED
-            self.kv_store.release_partitions(partition_keys_dic.keys())
+            self.kv_store.release_partitions(list(partition_keys_dic.keys()))
             self.set_exception(error)
             return
-        except BaseException, error:
+        except BaseException as error:
         # handle all other exception, for instance concurrent.futures._base.TimeoutError
             self.state = FINISHED
-            self.kv_store.release_partitions(partition_keys_dic.keys())
+            self.kv_store.release_partitions(list(partition_keys_dic.keys()))
             self.set_exception(error)
             return
-        for partition, keys in partition_keys_dic.items():
+        for partition, keys in list(partition_keys_dic.items()):
             self._check_validity(partition, keys, key_vals)
-        self.kv_store.release_partitions(partition_keys_dic.keys())
+        self.kv_store.release_partitions(list(partition_keys_dic.keys()))
 
     def _check_validity(self, partition, keys, key_vals):
 
@@ -1968,7 +1968,7 @@ class VerifyRevIdTask(GenericLoadingTask):
                                          self.src_server.ip, self.num_valid_keys)))
         return False
 
-    def next(self):
+    def __next__(self):
         if self.itr < self.num_valid_keys:
             self._check_key_revId(self.src_valid_keys[self.itr], self.collection)
         elif self.itr < (self.num_valid_keys + self.num_deleted_keys):
@@ -2023,7 +2023,7 @@ class VerifyRevIdTask(GenericLoadingTask):
                 "seqno on Destination should not be 0, Error Count:{0}".format(self.err_count))
 
         # verify all metadata
-        for meta_key in src_meta_data.keys():
+        for meta_key in list(src_meta_data.keys()):
             check = True
             if meta_key == 'flags' and not CHECK_FLAG:
                 check = False
@@ -2065,7 +2065,7 @@ class VerifyMetaDataTask(GenericLoadingTask):
                       .format(self.itr - self.num_valid_keys if self.itr > self.num_valid_keys else 0))
         return False
 
-    def next(self):
+    def __next__(self):
         if self.itr < self.num_valid_keys:
             self._check_key_meta_data(self.valid_keys[self.itr], self.collections)
         elif self.itr < (self.num_valid_keys + self.num_deleted_keys):
@@ -2106,7 +2106,7 @@ class VerifyMetaDataTask(GenericLoadingTask):
                 "seqno on Destination should not be 0, Error Count:{0}".format(self.err_count))
 
         # verify all metadata
-        for meta_key in src_meta_data.keys():
+        for meta_key in list(src_meta_data.keys()):
             if src_meta_data[meta_key] != dest_meta_data[meta_key] and meta_key not in ignore_meta_data:
                 self.err_count += 1
                 err_msg.append("{0} mismatch: Source {0}:{1}, Destination {0}:{2}, Error Count:{3}"
@@ -2145,7 +2145,7 @@ class GetMetaDataTask(GenericLoadingTask):
                       .format(self.itr - self.num_valid_keys if self.itr > self.num_valid_keys else 0))
         return False
 
-    def next(self):
+    def __next__(self):
         if self.itr < self.num_valid_keys:
             self.meta_data_store[self.valid_keys[self.itr]] = self.__get_meta_data(self.client,self.valid_keys[self.itr], self.collection)
         elif self.itr < (self.num_valid_keys + self.num_deleted_keys):
@@ -2249,12 +2249,12 @@ class ViewCreateTask(Task):
                 else:
                      _, json_parsed, _ = self.rest._get_design_doc(self.bucket, self.design_doc_name)
                      if self.view.is_spatial:
-                         if self.view.name not in json_parsed["spatial"].keys():
+                         if self.view.name not in list(json_parsed["spatial"].keys()):
                              self.set_exception(
                                 Exception("design doc {O} doesn't contain spatial view {1}".format(
                                 self.design_doc_name, self.view.name)))
                      else:
-                         if self.view.name not in json_parsed["views"].keys():
+                         if self.view.name not in list(json_parsed["views"].keys()):
                              self.set_exception(Exception("design doc {O} doesn't contain view {1}".format(
                                 self.design_doc_name, self.view.name)))
                 self.log.info("view : {0} was created successfully in ddoc: {1}".format(self.view.name, self.design_doc_name))
@@ -2318,7 +2318,7 @@ class ViewCreateTask(Task):
                        "username" : self.rest.username,
                        "password" : self.rest.password}
 
-            for count in xrange(retry_count):
+            for count in range(retry_count):
                 try:
                     rest_node = RestConnection(server_info)
                     content, meta = rest_node.get_ddoc(self.bucket, self.design_doc_name)
@@ -2462,7 +2462,7 @@ class ViewQueryTask(Task):
             self.log.info("Server: %s, Design Doc: %s, View: %s, (%d rows) expected, (%d rows) returned" % \
                           (self.server.ip, self.design_doc_name, self.view_name, self.expected_rows, len(content['rows'])))
 
-            raised_error = content.get(u'error', '') or ''.join([str(item) for item in content.get(u'errors', [])])
+            raised_error = content.get('error', '') or ''.join([str(item) for item in content.get('errors', [])])
             if raised_error:
                 raise QueryViewException(self.view_name, raised_error)
 
@@ -2793,17 +2793,17 @@ class MonitorViewQueryResultsTask(Task):
             self.results = self.rest.query_view(
                 self.design_doc_name, self.view_name, self.bucket, self.query,
                 self.timeout)
-            raised_error = self.results.get(u'error', '') or ''.join([str(item) for item in self.results.get(u'errors', [])])
+            raised_error = self.results.get('error', '') or ''.join([str(item) for item in self.results.get('errors', [])])
             if raised_error:
                 raise QueryViewException(self.view_name, raised_error)
             else:
                 self.log.info("view %s, query %s: expected- %s, actual -%s" % (
                                         self.design_doc_name, self.query,
                                         len(self.expected_docs),
-                                        len(self.results.get(u'rows', []))))
+                                        len(self.results.get('rows', []))))
                 self.state = CHECKING
                 task_manager.schedule(self)
-        except QueryViewException, ex:
+        except QueryViewException as ex:
             self.log.error("During query run (ddoc=%s, query=%s, server=%s) error is: %s" % (
                                 self.design_doc_name, self.query, self.servers[0].ip, str(ex)))
             if self.error and str(ex).find(self.error) != -1:
@@ -2835,10 +2835,10 @@ class MonitorViewQueryResultsTask(Task):
                 self.state = FINISHED
                 res = {"passed" : False,
                        "errors" : str(ex)}
-                if self.results and self.results.get(u'rows', []):
+                if self.results and self.results.get('rows', []):
                     res['results'] = self.results
                 self.set_result(res)
-        except Exception, ex:
+        except Exception as ex:
             if self.current_retry == self.retries:
                 self.state = CHECKING
                 self.log.error("view %s, query %s: verifying results" % (
@@ -2854,13 +2854,13 @@ class MonitorViewQueryResultsTask(Task):
         try:
             if self.view.red_func and (('reduce' in self.query and\
                         self.query['reduce'] == "true") or (not 'reduce' in self.query)):
-                if len(self.expected_docs) != len(self.results.get(u'rows', [])):
+                if len(self.expected_docs) != len(self.results.get('rows', [])):
                     if self.current_retry == self.retries:
                         self.state = FINISHED
                         msg = "ddoc=%s, query=%s, server=%s" % (
                             self.design_doc_name, self.query, self.servers[0].ip)
                         msg += "Number of groups expected:%s, actual:%s" % (
-                             len(self.expected_docs), len(self.results.get(u'rows', [])))
+                             len(self.expected_docs), len(self.results.get('rows', [])))
                         self.set_result({"passed" : False,
                                          "errors" : msg})
                     else:
@@ -2871,7 +2871,7 @@ class MonitorViewQueryResultsTask(Task):
                     for row in self.expected_docs:
                         key_expected = row['key']
 
-                        if not (key_expected in [key['key'] for key in self.results.get(u'rows', [])]):
+                        if not (key_expected in [key['key'] for key in self.results.get('rows', [])]):
                             if self.current_retry == self.retries:
                                 self.state = FINISHED
                                 msg = "ddoc=%s, query=%s, server=%s" % (
@@ -2884,7 +2884,7 @@ class MonitorViewQueryResultsTask(Task):
                                 self.state = EXECUTING
                                 task_manager.schedule(self, 10)
                         else:
-                            for res in self.results.get(u'rows', []):
+                            for res in self.results.get('rows', []):
                                 if key_expected == res['key']:
                                     value = res['value']
                                     break
@@ -2909,7 +2909,7 @@ class MonitorViewQueryResultsTask(Task):
                                     self.state = EXECUTING
                                     task_manager.schedule(self, 10)
                 return
-            if len(self.expected_docs) > len(self.results.get(u'rows', [])):
+            if len(self.expected_docs) > len(self.results.get('rows', [])):
                 if self.current_retry == self.retries:
                     self.state = FINISHED
                     self.set_result({"passed" : False,
@@ -2923,15 +2923,15 @@ class MonitorViewQueryResultsTask(Task):
                                     self.design_doc_name, self.query, self.servers[0].ip))
                     self.state = EXECUTING
                     task_manager.schedule(self, 10)
-            elif len(self.expected_docs) < len(self.results.get(u'rows', [])):
+            elif len(self.expected_docs) < len(self.results.get('rows', [])):
                 self.state = FINISHED
                 self.set_result({"passed" : False,
                                  "errors" : [],
                                  "results" : self.results})
-            elif len(self.expected_docs) == len(self.results.get(u'rows', [])):
+            elif len(self.expected_docs) == len(self.results.get('rows', [])):
                 if self.verify_rows:
                     expected_ids = [row['id'] for row in self.expected_docs]
-                    rows_ids = [str(row['id']) for row in self.results[u'rows']]
+                    rows_ids = [str(row['id']) for row in self.results['rows']]
                     if expected_ids == rows_ids:
                         self.state = FINISHED
                         self.set_result({"passed" : True,
@@ -2950,7 +2950,7 @@ class MonitorViewQueryResultsTask(Task):
                     self.set_result({"passed" : True,
                                      "errors" : []})
         # catch and set all unexpected exceptions
-        except Exception, e:
+        except Exception as e:
             self.state = FINISHED
             self.log.error("Exception caught %s" % str(e))
             self.set_exception(e)
@@ -3244,10 +3244,10 @@ class MonitorViewFragmentationTask(Task):
             try:
                 status, content = rest.set_view_info(bucket, design_doc_name)
             except Exception as e:
-                print(str(e))
+                print((str(e)))
                 if "Error occured reading set_view _info" in str(e) and with_rebalance:
-                    print("node {0} {1} is not ready yet?: {2}".format(
-                                    node.id, node.port, e.message))
+                    print(("node {0} {1} is not ready yet?: {2}".format(
+                                    node.id, node.port, e.message)))
                 else:
                     raise e
             if status:
@@ -3358,7 +3358,7 @@ class ViewCompactionTask(Task):
                 self.state = FINISHED
             else:
                 # Sometimes the compacting is not started immediately
-                for i in xrange(17):
+                for i in range(17):
                     time.sleep(3)
                     if self._is_compacting():
                         task_manager.schedule(self, 2)
@@ -3476,7 +3476,7 @@ class GenerateExpectedViewResultsTask(Task):
             self.log.info("Finished generating expected query results")
             self.state = CHECKING
             task_manager.schedule(self)
-        except Exception, ex:
+        except Exception as ex:
             self.state = FINISHED
             self.set_unexpected_exception(e)
 
@@ -3506,7 +3506,7 @@ class GenerateExpectedViewResultsTask(Task):
             query_doc_gen = copy.deepcopy(doc_gen)
             while query_doc_gen.has_next():
 
-                _id, val = query_doc_gen.next()
+                _id, val = next(query_doc_gen)
                 val = json.loads(val)
 
                 if isinstance(emit_key, list):
@@ -3519,7 +3519,7 @@ class GenerateExpectedViewResultsTask(Task):
                     filter_expr = r'\A{0}.*'.format(self.type_filter["filter_expr"])
                     if re.match(filter_expr, val[self.type_filter["filter_what"]]) is None:
                         continue
-                if isinstance(val_emit_key, unicode):
+                if isinstance(val_emit_key, str):
                     val_emit_key = val_emit_key.encode('utf-8')
                 if not self.is_reduced or self.view.red_func == "_count" or self.custom_red_fn:
                     self.emitted_rows.append({'id' : _id, 'key' : val_emit_key})
@@ -3551,7 +3551,7 @@ class GenerateExpectedViewResultsTask(Task):
                 start_key = start_key[1:-1]
             if isinstance(start_key, str) and start_key.find('[') == 0:
                 start_key = start_key[1:-1].split(',')
-                start_key = map(lambda x:int(x) if x != 'null' else None, start_key)
+                start_key = [int(x) if x != 'null' else None for x in start_key]
         else:
             start_key = expected_rows[0]['key']
             if isinstance(start_key, str) and start_key.find('"') == 0:
@@ -3562,7 +3562,7 @@ class GenerateExpectedViewResultsTask(Task):
                 end_key = end_key[1:-1]
             if isinstance(end_key, str) and end_key.find('[') == 0:
                 end_key = end_key[1:-1].split(',')
-                end_key = map(lambda x:int(x) if x != 'null' else None, end_key)
+                end_key = [int(x) if x != 'null' else None for x in end_key]
         else:
             end_key = expected_rows[-1]['key']
             if isinstance(end_key, str) and end_key.find('"') == 0:
@@ -3582,7 +3582,7 @@ class GenerateExpectedViewResultsTask(Task):
             key_ = query['key']
             if isinstance(key_, str) and key_.find('[') == 0:
                 key_ = key_[1:-1].split(',')
-                key_ = map(lambda x:int(x) if x != 'null' else None, key_)
+                key_ = [int(x) if x != 'null' else None for x in key_]
             start_key, end_key = key_, key_
             expected_rows = [row for row in expected_rows if row['key'] == key_]
 
@@ -3654,7 +3654,7 @@ class GenerateExpectedViewResultsTask(Task):
                    groups[None]['sum'] = math.fsum(values)
                    groups[None]['max'] = max(values)
                    groups[None]['min'] = min(values)
-                   groups[None]['sumsqr'] = math.fsum(map(lambda x: x * x, values))
+                   groups[None]['sumsqr'] = math.fsum([x * x for x in values])
                elif self.custom_red_fn:
                    custom_action = re.sub(r'.*return[ +]', '', re.sub(r'.*return[ +]', '', self.view.red_func))
                    if custom_action.find('String') != -1:
@@ -3693,7 +3693,7 @@ class GenerateExpectedViewResultsTask(Task):
                             groups[key]['min'] = min(row['value'], groups[key]['min'])
                             groups[key]['sumsqr'] += row['value'] ** 2
             expected_rows = []
-            for group, value in groups.iteritems():
+            for group, value in groups.items():
                 if isinstance(group, str) and group.find("[") == 0:
                     group = group[1:-1].split(",")
                     group = [int(k) for k in group]
@@ -3789,13 +3789,13 @@ class ViewQueryVerificationTask(Task):
 
             self.state = FINISHED
             self.set_result(rc_status)
-        except Exception, ex:
+        except Exception as ex:
             self.state = FINISHED
             try:
                 max_example_result = max(100, len(self.results['rows'] - 1))
                 self.log.info("FIRST %s RESULTS for view %s : %s" % (max_example_result , self.view_name,
                                                                      self.results['rows'][max_example_result]))
-            except Exception, inner_ex:
+            except Exception as inner_ex:
                  self.log.error(inner_ex)
             self.set_result({"passed" : False,
                              "errors" : "ERROR: %s" % ex})
@@ -3904,7 +3904,7 @@ class ViewQueryVerificationTask(Task):
                 mc_doc = json.loads(mc_item["value"])
 
                 # compare doc content
-                for key in mc_doc.keys():
+                for key in list(mc_doc.keys()):
                     if(mc_doc[key] != view_doc[key]):
                         err_msg = \
                             "error verifying document id %s: retrieved value %s expected %s \n" % \
@@ -4000,7 +4000,7 @@ class MonitorDBFragmentationTask(Task):
             else:
                 # try again
                 task_manager.schedule(self, 2)
-        except Exception, ex:
+        except Exception as ex:
             self.state = FINISHED
             self.set_result(False)
             self.set_exception(ex)
@@ -4029,7 +4029,7 @@ class CBRecoveryTask(Task):
             self.shell = RemoteMachineShellConnection(src_server)
             self.info = self.shell.extract_remote_info()
             self.rest = RestConnection(dest_server)
-        except Exception, e:
+        except Exception as e:
             self.log.error(e)
             self.state = FINISHED
             self.set_exception(e)
@@ -4282,7 +4282,7 @@ class MonitorViewCompactionTask(ViewCompactionTask):
                     self.set_result(True)
                 self.state = FINISHED
             else:
-                for i in xrange(10):
+                for i in range(10):
                     time.sleep(3)
                     if self._is_compacting():
                         task_manager.schedule(self, 2)
@@ -4365,7 +4365,7 @@ class MonitorDiskSizeFragmentationTask(Task):
                 task_manager.schedule(self, 5)
             self.log.info("New and Current Disk size is {0} {1}".format(new_disk_size, self.curr_disk_size))
             self.curr_disk_size = new_disk_size
-        except Exception, ex:
+        except Exception as ex:
             self.state = FINISHED
             self.set_result(False)
             self.set_exception(ex)
@@ -4380,7 +4380,7 @@ class CancelBucketCompactionTask(Task):
         self.statuses = {}
         try:
             self.rest = RestConnection(server)
-        except ServerUnavailableException, e:
+        except ServerUnavailableException as e:
             self.log.error(e)
             self.state = FINISHED
             self.set_exception(e)
@@ -4403,7 +4403,7 @@ class CancelBucketCompactionTask(Task):
             last_status = self.statuses.get(node.id)
             try:
                 rest = RestConnection(node)
-            except ServerUnavailableException, e:
+            except ServerUnavailableException as e:
                 self.log.error(e)
                 self.state = FINISHED
                 self.set_exception(e)
@@ -4454,7 +4454,7 @@ class EnterpriseBackupTask(Task):
         self.error = []
         try:
             self.remote_client = RemoteMachineShellConnection(self.backup_host)
-        except Exception, e:
+        except Exception as e:
             self.log.error(e)
             self.state = FINISHED
             self.set_exception(e)
@@ -4474,7 +4474,7 @@ class EnterpriseBackupTask(Task):
             command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
             self.output, self.error = self.remote_client.execute_command(command)
             self.state = CHECKING
-        except Exception, e:
+        except Exception as e:
             self.log.error("Backup cluster failed for unknown reason")
             self.set_exception(e)
             self.state = FINISHED
@@ -4519,7 +4519,7 @@ class EnterpriseRestoreTask(Task):
         self.end = end
         try:
             self.remote_client = RemoteMachineShellConnection(self.backup_host)
-        except Exception, e:
+        except Exception as e:
             self.log.error(e)
             self.state = FINISHED
             self.set_exception(e)
@@ -4548,7 +4548,7 @@ class EnterpriseRestoreTask(Task):
             command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
             self.output, self.error = self.remote_client.execute_command(command)
             self.state = CHECKING
-        except Exception, e:
+        except Exception as e:
             self.log.error("Restore failed for unknown reason")
             self.set_exception(e)
             self.state = FINISHED
@@ -4583,7 +4583,7 @@ class EnterpriseMergeTask(Task):
         self.end = end
         try:
             self.remote_client = RemoteMachineShellConnection(self.backup_host)
-        except Exception, e:
+        except Exception as e:
             self.log.error(e)
             self.state = FINISHED
             self.set_exception(e)
@@ -4603,7 +4603,7 @@ class EnterpriseMergeTask(Task):
             command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
             self.output, self.error = self.remote_client.execute_command(command)
             self.state = CHECKING
-        except Exception, e:
+        except Exception as e:
             self.log.error("Merge failed for unknown reason")
             self.set_exception(e)
             self.state = FINISHED
@@ -4637,7 +4637,7 @@ class EnterpriseCompactTask(Task):
         self.backups = backups
         try:
             self.remote_client = RemoteMachineShellConnection(self.backup_host)
-        except Exception, e:
+        except Exception as e:
             self.log.error(e)
             self.state = FINISHED
             self.set_exception(e)
@@ -4649,7 +4649,7 @@ class EnterpriseCompactTask(Task):
             command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
             self.output, self.error = self.remote_client.execute_command(command)
             self.state = CHECKING
-        except Exception, e:
+        except Exception as e:
             self.log.error("Compact failed for unknown reason")
             self.set_exception(e)
             self.state = FINISHED
@@ -4774,7 +4774,7 @@ class AutoFailoverNodesFailureTask(Task):
         if rest._rebalance_progress_status() == "running":
             self.rebalance_in_progress = True
         while self.has_next() and not self.done():
-            self.next()
+            next(self)
             if self.pause > 0 and self.pause > self.timeout:
                 self.check(task_manager)
         if self.pause == 0 or 0 < self.pause < self.timeout:
@@ -4867,7 +4867,7 @@ class AutoFailoverNodesFailureTask(Task):
     def has_next(self):
         return self.itr < self.num_servers_to_fail
 
-    def next(self):
+    def __next__(self):
         if self.pause != 0:
             time.sleep(self.pause)
             if self.pause > self.timeout and self.itr != 0:

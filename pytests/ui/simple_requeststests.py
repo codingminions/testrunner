@@ -1,12 +1,12 @@
 from basetestcase import BaseTestCase
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
-from httplib import IncompleteRead
+from http.client import IncompleteRead
 import sys
 import re
 
 class SimpleRequests(BaseTestCase):
-    def setUp(self):
+    def suite_setUp(self):
         super(SimpleRequests, self).setUp()
         shell = RemoteMachineShellConnection(self.master)
         type = shell.extract_remote_info().distribution_type
@@ -37,7 +37,7 @@ class SimpleRequests(BaseTestCase):
             self.log.info("GET " + url)
             try:
                 status, content, header = rest._http_request(url)
-            except IncompleteRead, e:
+            except IncompleteRead as e:
                 self.log.warn("size of partial responce {0} api is {1} bytes".format(api, sys.getsizeof(e.partial)))
                 if api != "diag":
                     #otherwise for /diag API we should increase request time for dynamic data in _http_request
@@ -62,3 +62,6 @@ class SimpleRequests(BaseTestCase):
                 passed = False
                 self.log.info(subcontent)
             self.assertTrue(passed, "some web request failed in the server logs. See logs above")
+
+    def suite_tearDown(self):
+        super(SimpleRequests , self).tearDown()

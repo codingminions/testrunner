@@ -6,7 +6,12 @@ Copyright (c) 2007  Dustin Sallings <dustin@spy.net>
 """
 
 import array
-import exceptions
+import builtins as exceptions
+
+
+exceptions_list = sorted(n for n, e in vars(exceptions).items()
+                         if isinstance(e, type) and
+                            issubclass(e, BaseException))
 import hmac
 import json
 import random
@@ -49,7 +54,7 @@ class MemcachedError(exceptions.Exception):
 
     def __init__(self, status, msg):
         error_msg = error_to_str(status)
-        supermsg = 'Memcached error #' + `status` + ' ' + `error_msg`
+        supermsg = 'Memcached error #' + repr(status) + ' ' + repr(error_msg)
         if msg: supermsg += ":  " + msg
         exceptions.Exception.__init__(self, supermsg)
 
@@ -224,7 +229,7 @@ class MemcachedClient(object):
         body = ''
         extraHeader = ''
         mcmd = None
-        for k, v  in cmdDict.iteritems():
+        for k, v  in list(cmdDict.items()):
             if k == "store":
                 mcmd = memcacheConstants.CMD_SUBDOC_DICT_ADD
             elif k == "counter":
@@ -626,7 +631,7 @@ class MemcachedClient(object):
         challenge = None
         try:
             self.sasl_auth_start('CRAM-MD5', '')
-        except MemcachedError, e:
+        except MemcachedError as e:
             if e.status != memcacheConstants.ERR_AUTH_CONTINUE:
                 raise
             challenge = e.msg.split(' ')[0]
@@ -642,11 +647,11 @@ class MemcachedClient(object):
         return self._doCmd(memcacheConstants.CMD_START_PERSISTENCE, '', '')
 
     def set_flush_param(self, key, val):
-        print "setting flush param:", key, val
+        print(("setting flush param:", key, val))
         return self._doCmd(memcacheConstants.CMD_SET_FLUSH_PARAM, key, val)
 
     def set_param(self, key, val, type):
-        print "setting param:", key, val
+        print(("setting param:", key, val))
         type = struct.pack(memcacheConstants.GET_RES_FMT, type)
         return self._doCmd(memcacheConstants.CMD_SET_FLUSH_PARAM, key, val, type)
 
@@ -660,7 +665,7 @@ class MemcachedClient(object):
         return self._doCmd(memcacheConstants.CMD_REVERT_ONLINEUPDATE, '', '')
 
     def set_tap_param(self, key, val):
-        print "setting tap param:", key, val
+        print(("setting tap param:", key, val))
         return self._doCmd(memcacheConstants.CMD_SET_TAP_PARAM, key, val)
 
     def set_vbucket_state(self, vbucket, stateName):
@@ -696,7 +701,7 @@ class MemcachedClient(object):
         terminal = len(opaqued) + 10
         # Send all of the keys in quiet
         vbs = set()
-        for k, v in opaqued.iteritems():
+        for k, v in list(opaqued.items()):
             self._set_vbucket(v, vbucket, collection=collection)
             vbs.add(self.vbucketId)
             self._sendCmd(memcacheConstants.CMD_GETQ, v, '', k, collection=collection)
@@ -728,7 +733,7 @@ class MemcachedClient(object):
         collection = self.collection_name(collection)
 
         if hasattr(items, 'iteritems'):
-            items = items.iteritems()
+            items = iter(list(items.items()))
 
         opaqued = dict(enumerate(items))
         terminal = len(opaqued) + 10
@@ -736,7 +741,7 @@ class MemcachedClient(object):
 
         # Send all of the keys in quiet
         vbs = set()
-        for opaque, kv in opaqued.iteritems():
+        for opaque, kv in list(opaqued.items()):
             self._set_vbucket(kv[0], vbucket, collection=collection)
             vbs.add(self.vbucketId)
             self._sendCmd(memcacheConstants.CMD_SETQ, kv[0], kv[1], opaque, extra, collection=collection)
@@ -754,7 +759,7 @@ class MemcachedClient(object):
                 try:
                     opaque, cas, data = self._handleSingleResponse(None)
                     done = opaque == terminal
-                except MemcachedError, e:
+                except MemcachedError as e:
                     failed.append(e)
 
         return failed
@@ -802,37 +807,37 @@ class MemcachedClient(object):
     def sync_persistence(self, keyspecs):
         payload = self._build_sync_payload(0x8, keyspecs)
 
-        print "sending sync for persistence command for the following keyspecs:", keyspecs
+        print(("sending sync for persistence command for the following keyspecs:", keyspecs))
         (opaque, cas, data) = self._doCmd(memcacheConstants.CMD_SYNC, "", payload)
         return (opaque, cas, self._parse_sync_response(data))
 
     def sync_mutation(self, keyspecs):
         payload = self._build_sync_payload(0x4, keyspecs)
 
-        print "sending sync for mutation command for the following keyspecs:", keyspecs
+        print(("sending sync for mutation command for the following keyspecs:", keyspecs))
         (opaque, cas, data) = self._doCmd(memcacheConstants.CMD_SYNC, "", payload)
         return (opaque, cas, self._parse_sync_response(data))
 
     def sync_replication(self, keyspecs, numReplicas=1):
         payload = self._build_sync_payload((numReplicas & 0x0f) << 4, keyspecs)
 
-        print "sending sync for replication command for the following keyspecs:", keyspecs
+        print(("sending sync for replication command for the following keyspecs:", keyspecs))
         (opaque, cas, data) = self._doCmd(memcacheConstants.CMD_SYNC, "", payload)
         return (opaque, cas, self._parse_sync_response(data))
 
     def sync_replication_or_persistence(self, keyspecs, numReplicas=1):
         payload = self._build_sync_payload(((numReplicas & 0x0f) << 4) | 0x8, keyspecs)
 
-        print "sending sync for replication or persistence command for the " \
-            "following keyspecs:", keyspecs
+        print(("sending sync for replication or persistence command for the " \
+            "following keyspecs:", keyspecs))
         (opaque, cas, data) = self._doCmd(memcacheConstants.CMD_SYNC, "", payload)
         return (opaque, cas, self._parse_sync_response(data))
 
     def sync_replication_and_persistence(self, keyspecs, numReplicas=1):
         payload = self._build_sync_payload(((numReplicas & 0x0f) << 4) | 0xA, keyspecs)
 
-        print "sending sync for replication and persistence command for the " \
-            "following keyspecs:", keyspecs
+        print(("sending sync for replication and persistence command for the " \
+            "following keyspecs:", keyspecs))
         (opaque, cas, data) = self._doCmd(memcacheConstants.CMD_SYNC, "", payload)
         return (opaque, cas, self._parse_sync_response(data))
 
@@ -843,9 +848,9 @@ class MemcachedClient(object):
         for spec in keyspecs:
             if not isinstance(spec, dict):
                 raise TypeError("each keyspec must be a dict")
-            if not spec.has_key('vbucket'):
+            if 'vbucket' not in spec:
                 raise TypeError("missing vbucket property in keyspec")
-            if not spec.has_key('key'):
+            if 'key' not in spec:
                 raise TypeError("missing key property in keyspec")
 
             payload += struct.pack(">Q", spec.get('cas', 0))
@@ -860,7 +865,7 @@ class MemcachedClient(object):
         nkeys = struct.unpack(">H", data[0 : struct.calcsize("H")])[0]
         offset = struct.calcsize("H")
 
-        for i in xrange(nkeys):
+        for i in range(nkeys):
             spec = {}
             width = struct.calcsize("QHHB")
             (spec['cas'], spec['vbucket'], keylen, eventid) = \
@@ -922,7 +927,7 @@ class MemcachedClient(object):
         def new_func(*args, **kwargs):
             try:
                 return fn(*args, **kwargs)
-            except Exception, ex:
+            except Exception as ex:
                 raise
         return new_func
 
@@ -1010,7 +1015,7 @@ class MemcachedClient(object):
 
         d = {}
 
-        for k,v in errmap['errors'].iteritems():
+        for k,v in list(errmap['errors'].items()):
             d[int(k, 16)] = v
 
         errmap['errors'] = d
@@ -1058,7 +1063,7 @@ class MemcachedClient(object):
             # expect scope.collection for name API
             try:
                 collection = self.collection_map[collection]
-            except KeyError, e:
+            except KeyError as e:
                 self.log.info("Error: cannot map collection \"{}\" to an ID".format(collection))
                 self.log.info("name API expects \"scope.collection\" as the key")
                 raise e
@@ -1083,8 +1088,8 @@ class MemcachedClient(object):
         for scope in parsed['scopes']:
             try:
                 for collection in scope['collections']:
-                    key = scope[u'name'] + "." + collection[u'name']
-                    self.collection_map[key] = int(collection[u'uid'], 16)
+                    key = scope['name'] + "." + collection['name']
+                    self.collection_map[key] = int(collection['uid'], 16)
             except KeyError:
                 pass
 

@@ -4,7 +4,7 @@ from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from remote.remote_util import RemoteMachineShellConnection
 from remote.remote_util import RemoteUtilHelper
-from failoverbasetests import FailoverBaseTest
+from .failoverbasetests import FailoverBaseTest
 
 GRACEFUL = "graceful"
 
@@ -436,7 +436,7 @@ class FailoverTests(FailoverBaseTest):
         try:
             for task in mutation_ops_tasks:
                     task.result()
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
 
     def run_mutation_operations_after_failover(self):
@@ -450,7 +450,7 @@ class FailoverTests(FailoverBaseTest):
         try:
             for task in mutation_ops_tasks:
                 task.result()
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
 
     def define_maps_during_failover(self, recoveryType=[]):

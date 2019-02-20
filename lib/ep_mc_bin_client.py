@@ -6,6 +6,7 @@ Copyright (c) 2007  Dustin Sallings <dustin@spy.net>
 
 import array
 import exceptions
+
 import hmac
 import json
 import random
